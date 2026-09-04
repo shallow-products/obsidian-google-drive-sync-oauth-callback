@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Obsidian Google Drive Sync — OAuth Callback</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f5;
+    --card-bg: #ffffff;
+    --text: #1a1a1a;
+    --muted: #6b6b6b;
+    --border: #e2e2e0;
+    --accent: #2e7d32;
+    --accent-fg: #ffffff;
+    --error-bg: #fdecea;
+    --error-text: #92140c;
+    --mono-bg: #f0f0ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a;
+      --card-bg: #202225;
+      --text: #eaeaea;
+      --muted: #9a9a9a;
+      --border: #34363a;
+      --accent: #4caf50;
+      --accent-fg: #0b0b0b;
+      --error-bg: #3a1f1d;
+      --error-text: #ff8a80;
+      --mono-bg: #17181b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.6;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 24px;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  .box {
+    background: var(--mono-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    word-break: break-all;
+    max-height: 140px;
+    overflow-y: auto;
+    margin-bottom: 14px;
+  }
+  button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:active { opacity: 0.85; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+  .error-box {
+    background: var(--error-bg);
+    color: var(--error-text);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13.5px;
+  }
+  .status { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  footer {
+    margin-top: 22px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <!-- filled by script -->
+  </div>
+
+  <script>
+    // このページは外部通信・外部リソースを一切行いません（完全に自己完結した静的ページ）。
+    // 目的: Google OAuth の認可コードを、Obsidian プラグイン (obsidian-google-drive-sync)
+    // に安全に受け渡すためだけの中継ページです。
+
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var code = params.get("code");
+      var state = params.get("state");
+      var error = params.get("error");
+      var isJa = (navigator.language || "").toLowerCase().indexOf("ja") === 0;
+      var card = document.getElementById("card");
+
+      function el(tag, attrs, children) {
+        var e = document.createElement(tag);
+        if (attrs) {
+          for (var k in attrs) {
+            if (k === "text") e.textContent = attrs[k];
+            else e.setAttribute(k, attrs[k]);
+          }
+        }
+        (children || []).forEach(function (c) { e.appendChild(c); });
+        return e;
+      }
+
+      var footer = el("footer", {}, [
+        document.createTextNode(
+          isJa
+            ? "このページは外部通信を一切行いません。ソースコード: "
+            : "This page makes no external network requests. Source: "
+        ),
+        el("a", {
+          href: "https://github.com/shallow1992/obsidian-google-drive-sync-oauth-callback",
+          text: "GitHub"
+        })
+      ]);
+
+      if (error) {
+        card.appendChild(el("h1", { text: isJa ? "認証がキャンセルされました" : "Authentication was cancelled" }));
+        card.appendChild(el("p", { class: "sub", text: isJa
+          ? "Google 側で許可が得られませんでした。Obsidian に戻り、もう一度 [認証URLを開く] からやり直してください。"
+          : "Google did not grant access. Go back to Obsidian and retry from [Open Auth URL]." }));
+        card.appendChild(el("div", { class: "error-box", text: error }));
+        card.appendChild(footer);
+        return;
+      }
+
+      if (!code) {
+        card.appendChild(el("h1", { text: isJa ? "認可コードが見つかりません" : "No authorization code found" }));
+        card.appendChild(el("p", { class: "sub", text: isJa
+          ? "このページは Google の認証完了後にのみ有効なパラメータを必要とします。Obsidian の [認証URLを開く] から開き直してください。"
+          : "This page needs parameters that only exist right after Google's consent screen. Please reopen it via [Open Auth URL] in Obsidian." }));
+        card.appendChild(footer);
+        return;
+      }
+
+      var payload = btoa(JSON.stringify({ code: code, state: state || "" }));
+
+      card.appendChild(el("h1", { text: isJa ? "認証に成功しました" : "Authentication successful" }));
+      card.appendChild(el("p", { class: "sub", text: isJa
+        ? "下のボタンでコピーし、Obsidian の設定画面「認可コードの入力」欄にそのまま貼り付けてください。"
+        : "Tap the button below to copy, then paste it as-is into the “Authorization Code” field in Obsidian's settings." }));
+
+      var box = el("div", { class: "box", id: "payloadBox", text: payload });
+      card.appendChild(box);
+
+      var status = el("div", { class: "status", id: "status" });
+
+      var btn = el("button", { type: "button", text: isJa ? "コピーする" : "Copy" });
+      btn.addEventListener("click", function () {
+        function done(ok) {
+          status.textContent = ok
+            ? (isJa ? "コピーしました。Obsidian に戻って貼り付けてください。" : "Copied. Go back to Obsidian and paste it.")
+            : (isJa ? "自動コピーに失敗しました。上のボックスを長押し/選択して手動でコピーしてください。" : "Auto-copy failed. Please long-press/select the box above and copy manually.");
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(payload).then(function () { done(true); }, function () { done(false); });
+        } else {
+          done(false);
+        }
+      });
+      card.appendChild(btn);
+      card.appendChild(status);
+
+      card.appendChild(el("p", { class: "hint", text: isJa
+        ? "この文字列には Google が発行した使い捨ての認可コードが含まれています。数分で失効し、1回使うと無効になります。"
+        : "This string contains a one-time authorization code issued by Google. It expires within minutes and becomes invalid after a single use." }));
+
+      card.appendChild(footer);
+    })();
+  </script>
+</body>
+</html>
